@@ -1,1 +1,7 @@
+pip
 fastapi
+uvicorn
+uuid
+pydantic
+typing
+pytz
