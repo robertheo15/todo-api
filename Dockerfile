@@ -19,4 +19,4 @@ EXPOSE 80
 ENV PYTHONUNBUFFERED=1
 
 # Run app.py when the container launches
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "3000"]
