@@ -4,19 +4,19 @@ services:
     image: ghcr.io/robertheo15/todo-api:latest
     container_name: todo-api
     ports:
-      - "80:80"
+      - "80:3000"
     restart: unless-stopped
   
   todo-api-staging:
     image: ghcr.io/robertheo15/todo-api:staging
     container_name: todo-api-staging
     ports:
-      - "8080:8080"
+      - "8080:3000"
     restart: unless-stopped
   
   todo-api-develop:
     image: ghcr.io/robertheo15/todo-api:develop
     container_name: todo-api-develop
     ports:
-      - "8081:8081"
+      - "8081:3000"
     restart: unless-stopped
