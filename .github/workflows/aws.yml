@@ -1,27 +1,46 @@
-name: Deploy to EC2 (Docker)
+name: Deploy to EC2 (Multi-target)
 
 on:
   push:
     branches:
       - main
-      
+      - staging
+      - develop
+    tags:
+      - 'v*'
+
 permissions:
   contents: read
   packages: write
 
-env:
-  IMAGE_NAME: ghcr.io/robertheo15/todo-api
-  IMAGE_TAG: ${{ github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/') && 'latest' || github.ref_name || github.sha }}
-  TARGET_PORT: ${{ github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/') && '80' || '8080' }}
-  CONTAINER_NAME: ${{ github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/') && 'todo-api' || format('todo-api-{0}', github.ref_name) }}
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    environment: ${{ github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/') && 'production' || github.ref_name }}
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set deployment variables
+        id: vars
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" || "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "image_tag=latest" >> $GITHUB_OUTPUT
+            echo "target_port=80" >> $GITHUB_OUTPUT
+            echo "container_name=todo-api" >> $GITHUB_OUTPUT
+            echo "env_name=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" == "staging" ]]; then
+            echo "image_tag=staging" >> $GITHUB_OUTPUT
+            echo "target_port=8080" >> $GITHUB_OUTPUT
+            echo "container_name=todo-api-staging" >> $GITHUB_OUTPUT
+            echo "env_name=staging" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" == "develop" ]]; then
+            echo "image_tag=develop" >> $GITHUB_OUTPUT
+            echo "target_port=8081" >> $GITHUB_OUTPUT
+            echo "container_name=todo-api-develop" >> $GITHUB_OUTPUT
+            echo "env_name=develop" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -33,12 +52,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image to GHCR
+      - name: Build and push image
+        env:
+          IMAGE_NAME: ghcr.io/robertheo15/todo-api
+          IMAGE_TAG: ${{ steps.vars.outputs.image_tag || github.sha }}
         run: |
-          docker build -t ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} .
-          docker push ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          docker build -t $IMAGE_NAME:$IMAGE_TAG .
+          docker push $IMAGE_NAME:$IMAGE_TAG
 
-      - name: Deploy to ${{ env.IMAGE_TAG }} via SSH
+      - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -46,14 +68,13 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            echo "Deploying to ${{ env.IMAGE_TAG }}..."
-            sudo docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-            sudo docker stop ${{ env.CONTAINER_NAME }} || true
-            sudo docker rm ${{ env.CONTAINER_NAME }} || true
+            echo "Deploying ${{ steps.vars.outputs.container_name }} (${{ steps.vars.outputs.image_tag }})..."
+            sudo docker pull ghcr.io/robertheo15/todo-api:${{ steps.vars.outputs.image_tag }}
+            sudo docker stop ${{ steps.vars.outputs.container_name }} || true
+            sudo docker rm ${{ steps.vars.outputs.container_name }} || true
             sudo docker run \
               -d \
-              --name ${{ env.CONTAINER_NAME }} \
-              -p ${{ env.TARGET_PORT }}:3000 \
-              ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-            echo "Deployed ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} on port ${{ env.TARGET_PORT }}"
-
+              --name ${{ steps.vars.outputs.container_name }} \
+              -p ${{ steps.vars.outputs.target_port }}:3000 \
+              ghcr.io/robertheo15/todo-api:${{ steps.vars.outputs.image_tag }}
+            echo "Deployed on port ${{ steps.vars.outputs.target_port }}"
