@@ -35,6 +35,11 @@ jobs:
         run: |
           docker build -t ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} .
           docker push ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          
+      - name: Debug secrets (temporary)
+        run: |
+          echo "EC2_HOST is set: ${{ secrets.EC2_HOST != '' }}"
+          echo "EC2_USERNAME is set: ${{ secrets.EC2_USERNAME != '' }}"
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v0.1.10
@@ -44,12 +49,19 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            # Example assuming you run your app with docker run
+            echo "Pulling new image..."
             sudo docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            
+            echo "Stopping old container..."
             sudo docker stop todo-api || true
             sudo docker rm todo-api || true
+            
+            echo "Starting new container..."
             sudo docker run \
               -d \
               --name todo-api \
-              -p 80:3000 \  # change 3000 to your app port
+              -p 80:3000 \
               ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            
+            echo "Done!"
+
